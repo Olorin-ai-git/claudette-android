@@ -168,11 +168,31 @@ class SshConnectionManager(
                 pipedOutput.write(command.toByteArray())
                 pipedOutput.flush()
 
-                // Read output loop
-                val invertedStream = channel.invertedOut
+                // Read stdout and stderr concurrently
+                val stdoutStream = channel.invertedOut
+                val stderrStream = channel.invertedErr
+
+                // Stderr reader on a separate coroutine
+                val stderrJob = launch {
+                    val errBuf = ByteArray(4096)
+                    try {
+                        while (isActive && channel.isOpen) {
+                            val n = stderrStream.read(errBuf)
+                            if (n == -1) break
+                            val chunk = errBuf.copyOf(n)
+                            outputInterceptor?.onOutput(chunk)
+                            appendToLineBuffer(chunk)
+                            _outputFlow.emit(chunk)
+                        }
+                    } catch (_: Exception) {
+                        // Stderr stream closed
+                    }
+                }
+
+                // Stdout reader on the main connection coroutine
                 val buffer = ByteArray(8192)
                 while (isActive && channel.isOpen) {
-                    val bytesRead = invertedStream.read(buffer)
+                    val bytesRead = stdoutStream.read(buffer)
                     if (bytesRead == -1) break
 
                     val chunk = buffer.copyOf(bytesRead)
@@ -180,6 +200,8 @@ class SshConnectionManager(
                     appendToLineBuffer(chunk)
                     _outputFlow.emit(chunk)
                 }
+
+                stderrJob.cancel()
 
                 Timber.i("PTY session ended")
                 _connectionState.value = ConnectionState.Disconnected

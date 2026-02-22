@@ -3,10 +3,11 @@ package com.olorin.claudette.ui.screens.session
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Paint
 import android.graphics.Typeface
-import android.text.SpannableStringBuilder
 import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.ViewTreeObserver
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -17,22 +18,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.olorin.claudette.config.AppConfiguration
-import com.olorin.claudette.models.TerminalBlock
 import com.olorin.claudette.services.impl.TerminalBlockDetector
 import com.olorin.claudette.terminal.TerminalController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
-/**
- * Terminal view using a simple TextView-based renderer.
- * This renders SSH output as monospaced text with ANSI stripping.
- *
- * For a full terminal emulator (xterm-256color with cursor addressing),
- * integrate Termux terminal-emulator library here. This implementation
- * provides a functional terminal for text-based SSH workflows like
- * Claude Code.
- */
 @Composable
 fun TerminalView(
     controller: TerminalController,
@@ -48,6 +40,20 @@ fun TerminalView(
             isFillViewport = true
         }
     }
+
+    // Measure monospace char width for terminal size calculation
+    val charMetrics = remember {
+        val paint = Paint().apply {
+            typeface = Typeface.MONOSPACE
+            textSize = config.terminalFontSize * context.resources.displayMetrics.scaledDensity
+        }
+        val charWidth = paint.measureText("M")
+        val lineHeight = paint.fontMetrics.let { it.bottom - it.top + it.leading }
+        charWidth to lineHeight
+    }
+
+    // Track last sent terminal size to avoid duplicate resize calls
+    val lastSentSize = remember { intArrayOf(0, 0) }
 
     val textView = remember {
         TextView(context).apply {
@@ -65,7 +71,6 @@ fun TerminalView(
                     val lines = controller.getOutputLines()
                     if (lines.isEmpty()) return true
 
-                    // Estimate which line was tapped
                     val lineHeight = this@apply.lineHeight.toFloat()
                     val scrollY = scrollView.scrollY
                     val tapY = e.y + scrollY
@@ -81,7 +86,7 @@ fun TerminalView(
                 }
             })
 
-            setOnTouchListener { v, event ->
+            setOnTouchListener { _, event ->
                 gestureDetector.onTouchEvent(event)
                 false
             }
@@ -89,18 +94,41 @@ fun TerminalView(
     }
 
     DisposableEffect(controller) {
+        // Collect SSH output and render
         val job = scope.launch {
             controller.renderTrigger.collect { bytes ->
                 val text = stripAnsi(String(bytes, Charsets.UTF_8))
                 textView.append(text)
-
-                // Auto-scroll to bottom
                 scrollView.post {
                     scrollView.fullScroll(ScrollView.FOCUS_DOWN)
                 }
             }
         }
-        onDispose { job.cancel() }
+
+        // Measure terminal size on layout changes and send resize
+        val layoutListener = ViewTreeObserver.OnGlobalLayoutListener {
+            val (charWidth, lineHeight) = charMetrics
+            val viewWidth = scrollView.width - scrollView.paddingLeft - scrollView.paddingRight
+            val viewHeight = scrollView.height - scrollView.paddingTop - scrollView.paddingBottom
+
+            if (viewWidth > 0 && viewHeight > 0 && charWidth > 0 && lineHeight > 0) {
+                val cols = (viewWidth / charWidth).toInt().coerceAtLeast(20)
+                val rows = (viewHeight / lineHeight).toInt().coerceAtLeast(5)
+
+                if (cols != lastSentSize[0] || rows != lastSentSize[1]) {
+                    lastSentSize[0] = cols
+                    lastSentSize[1] = rows
+                    Timber.d("Terminal resize: %dx%d", cols, rows)
+                    controller.resize(cols, rows)
+                }
+            }
+        }
+        scrollView.viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
+
+        onDispose {
+            job.cancel()
+            scrollView.viewTreeObserver.removeOnGlobalLayoutListener(layoutListener)
+        }
     }
 
     AndroidView(
