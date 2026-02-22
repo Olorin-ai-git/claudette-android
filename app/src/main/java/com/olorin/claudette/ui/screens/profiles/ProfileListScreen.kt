@@ -82,6 +82,20 @@ fun ProfileListScreen(
     val profiles by viewModel.profiles.collectAsState()
     val context = LocalContext.current
 
+    // Reload profiles every time this screen becomes visible (e.g. after editor save)
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.loadProfiles()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     var connectDialogProfile by remember { mutableStateOf<ServerProfile?>(null) }
 
     Scaffold(
