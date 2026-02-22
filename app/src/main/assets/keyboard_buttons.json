@@ -1,0 +1,24 @@
+[
+  { "label": "Esc", "byteSequence": [27] },
+  {
+    "label": "/resume",
+    "byteSequence": [47, 114, 101, 115, 117, 109, 101, 13]
+  },
+  { "label": "/clear", "byteSequence": [47, 99, 108, 101, 97, 114, 13] },
+  { "label": "Paste Img", "byteSequence": [], "action": "paste_image" },
+  { "label": "Tab", "byteSequence": [9] },
+  { "label": "Ctrl+C", "byteSequence": [3] },
+  { "label": "Ctrl+T", "byteSequence": [20] },
+  { "label": "S-Tab", "byteSequence": [27, 91, 90] },
+  { "label": "|", "byteSequence": [124] },
+  { "label": "/", "byteSequence": [47] },
+  { "label": "<", "byteSequence": [60] },
+  { "label": ">", "byteSequence": [62] },
+  { "label": "[", "byteSequence": [91] },
+  { "label": "{", "byteSequence": [123] },
+  { "label": "-", "byteSequence": [45] },
+  { "label": "\u2190", "byteSequence": [27, 91, 68] },
+  { "label": "\u2193", "byteSequence": [27, 91, 66] },
+  { "label": "\u2191", "byteSequence": [27, 91, 65] },
+  { "label": "\u2192", "byteSequence": [27, 91, 67] }
+]
