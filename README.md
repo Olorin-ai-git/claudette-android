@@ -1,30 +1,43 @@
 # Claudette for Android
 
-The SSH terminal built for Claude Code. Control AI coding sessions from your Android phone or tablet.
+The mobile workstation for Claude Code. 35+ power tools, raw terminal access, zero abstraction.
 
-**Website:** [claudettemobile.com](https://claudettemobile.com)
+**Website:** [claudettemobile.com](https://claudettemobile.com) · **Google Play:** [Download](https://play.google.com/store/apps/details?id=com.olorin.claudette)
 
 ---
 
 ## What is Claudette?
 
-Claudette is a purpose-built SSH terminal client that connects to your Mac and lets you drive [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions from anywhere. Full terminal emulation, an extended keyboard row, one-tap commands, prompt snippets, and session persistence -- all designed for the developer who ships with AI.
+Claudette is a purpose-built mobile workstation that connects to your Mac and lets you drive [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions from anywhere. Full terminal emulation, live context monitoring, agent visualization, voice I/O, file editing — no abstraction, full control.
 
 This is the **Android** app. The iOS app and companion CLI live in [claudette](https://github.com/Olorin-ai-git/claudette).
 
 ## Features
 
-- **Full Terminal** -- SSH terminal with an extended keyboard row: Esc, Tab, Ctrl+C, pipe, brackets, and programming symbols
-- **Multi-Tab Sessions** -- Multiple terminal tabs, each wrapped in its own tmux session
-- **Commands, Skills & Agents** -- Browse and trigger your entire Claude Code toolkit with one tap
-- **Prompt Snippets** -- Quick-access drawer organized by workflow: refactoring, debugging, Git, and more
-- **CLAUDE.md Viewer** -- Review project instructions, token estimates, and character counts at a glance
-- **Voice Input** -- Dictate prompts to Claude Code hands-free via the microphone overlay
-- **File Browser & Editor** -- Browse and edit remote files over SFTP without leaving the app
-- **Session Persistence** -- tmux-wrapped sessions survive app backgrounding and reconnect automatically
-- **Host Key Verification** -- TOFU (Trust On First Use) fingerprint pinning for secure connections
-- **Wake-on-LAN** -- Wake your Mac remotely before connecting
-- **mDNS Discovery** -- Automatically discover Macs on your local network
+### Claude Code Intelligence
+
+- **Full Terminal** — SSH terminal with an extended keyboard row: Esc, Tab, Ctrl+C, Ctrl+T, pipe, brackets, and programming symbols
+- **Multi-Tab Sessions** — Multiple terminal tabs, each wrapped in its own tmux session
+- **Commands, Skills & Agents** — Browse and trigger your entire Claude Code toolkit with one tap
+- **Structured Mode** — Switch between raw terminal and a chat-like interface that shows tool use, results, and messages in a clean conversation view with streaming
+- **Context Monitor & Costs** — Real-time token usage gauge with cost tracking. See context window usage, get warnings at thresholds, and track session costs live
+- **Live Task Monitor** — Watch Claude's tasks in real time. See pending, in-progress, and completed tasks with a live progress bar and animated status indicators
+- **Prompt Snippets** — Quick-access drawer organized by workflow: refactoring, debugging, Git, and more
+- **CLAUDE.md Viewer** — Review project instructions, token estimates, and character counts at a glance
+- **Voice Input** — Dictate prompts to Claude Code hands-free via the microphone overlay
+- **Vocal Summary** — AI-powered voice summaries when Claude finishes a task. Claudette reads a concise summary aloud so you can follow along without watching the screen
+- **Session Persistence** — tmux-wrapped sessions survive app backgrounding and reconnect automatically
+
+### Infrastructure
+
+- **Olorin Relay** — Connect from anywhere without VPN, port forwarding, or networking knowledge. A managed WebSocket relay bridges your phone to your Mac through Olorin's infrastructure
+- **Ed25519 SSH Keys** — Generated on-device, stored in Android Keystore
+- **TOFU Host Verification** — Trust-on-first-use fingerprint pinning warns on changes
+- **SFTP File Browser** — Browse and edit remote files over SFTP without leaving the app
+- **Hooks & Automation** — Configure Claude Code event hooks directly from the app (PreToolUse, PostToolUse, Notification, Stop)
+- **Bonjour/mDNS Discovery** — Automatically discover Macs on your local network
+- **Wake-on-LAN** — Wake your Mac remotely before connecting
+- **Auto-Reconnect** — Automatic reconnection when the app returns from background
 
 ## Tech Stack
 
@@ -57,7 +70,7 @@ Before connecting Claudette to your Mac, ensure you have:
 
 There are two ways to set up your Mac. Choose the one that fits:
 
-|                 | Manual Checklist            | CLI (`npx claudette-setup`) |
+|                 | Manual Checklist            | CLI (`npx claudette setup`) |
 | --------------- | --------------------------- | --------------------------- |
 | **Best for**    | Understanding each step     | Getting started fast        |
 | **Time**        | ~5 minutes                  | ~1 minute                   |
@@ -116,9 +129,9 @@ ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
 2. Tap **+** to add a new server profile
 3. Enter your Mac's IP address, username, and SSH port (default: 22)
 4. Choose an authentication method:
-   - **Generate Key** -- creates an Ed25519 key pair on-device (recommended)
-   - **Import Key** -- import an existing PEM private key
-   - **Password** -- use your macOS password
+   - **Generate Key** — creates an Ed25519 key pair on-device (recommended)
+   - **Import Key** — import an existing PEM private key
+   - **Password** — use your macOS password
 5. If you generated a key, copy the public key and append it to `~/.ssh/authorized_keys` on your Mac:
    ```bash
    echo "ssh-ed25519 AAAA..." >> ~/.ssh/authorized_keys
@@ -126,16 +139,24 @@ ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
    ```
 6. Tap the server to connect
 7. On first connection, verify the host key fingerprint matches Step 5
-8. Tap **Trust** -- you're in
+8. Tap **Trust** — you're in
 
 ---
 
 ### Option B: Quick Setup with CLI
 
-The `claudette-setup` CLI (from the [iOS repo](https://github.com/Olorin-ai-git/claudette/tree/main/cli)) automates the entire checklist:
+The `claudette setup` CLI (from the [iOS repo](https://github.com/Olorin-ai-git/claudette/tree/main/cli)) automates the entire checklist:
 
 ```bash
-npx claudette-setup
+npx claudette setup
+```
+
+#### Olorin Relay Setup
+
+To connect from anywhere without VPN or port forwarding:
+
+```bash
+npx claudette setup --register
 ```
 
 The CLI is purely a convenience tool. Everything it does can be done manually using the checklist above.
@@ -144,13 +165,14 @@ The CLI is purely a convenience tool. Everything it does can be done manually us
 
 ## Network Configuration
 
-| Method        | Works from               | Stability                           | Setup                           |
-| ------------- | ------------------------ | ----------------------------------- | ------------------------------- |
-| **Tailscale** | Anywhere                 | Stable IP, survives network changes | Install on Mac + phone, sign in |
-| **Same WiFi** | Home only                | IP may change on DHCP renewal       | None                            |
-| **VPN**       | Anywhere the VPN reaches | Depends on VPN provider             | Configure VPN on both devices   |
+| Method           | Works from               | Stability                           | Setup                            |
+| ---------------- | ------------------------ | ----------------------------------- | -------------------------------- |
+| **Olorin Relay** | Anywhere                 | Stable, managed infrastructure      | `npx claudette setup --register` |
+| **Tailscale**    | Anywhere                 | Stable IP, survives network changes | Install on Mac + phone, sign in  |
+| **Same WiFi**    | Home only                | IP may change on DHCP renewal       | None                             |
+| **VPN**          | Anywhere the VPN reaches | Depends on VPN provider             | Configure VPN on both devices    |
 
-**Tailscale is strongly recommended.** It's free for personal use, gives each device a stable IP address, and works from any network without port forwarding.
+**Olorin Relay is the easiest option.** One command registers your Mac and Claudette connects from any network automatically. **Tailscale** is a great alternative — free for personal use with stable IPs and no port forwarding.
 
 ---
 
@@ -158,9 +180,9 @@ The CLI is purely a convenience tool. Everything it does can be done manually us
 
 - **Ed25519 keys** generated on-device, stored in Android Keystore
 - **TOFU host key verification** pins fingerprints on first connect and warns on changes
-- **No cloud servers** -- SSH connections go directly between your device and your Mac
-- **No telemetry or analytics** -- zero network requests except to servers you configure
-- **Open source** -- audit every line of code
+- **No cloud servers** — SSH connections go directly between your device and your Mac (or via Olorin Relay if enabled)
+- **No telemetry or analytics** — zero network requests except to servers you configure
+- **Open source** — audit every line of code
 
 ## Privacy
 
@@ -186,8 +208,8 @@ Requires Android Studio Hedgehog (2023.1) or later with Kotlin 2.0+.
 
 ## Related Repositories
 
-- [claudette](https://github.com/Olorin-ai-git/claudette) -- iOS app + companion setup CLI
-- [claudettemobile.com](https://claudettemobile.com) -- Website and documentation
+- [claudette](https://github.com/Olorin-ai-git/claudette) — iOS app + companion setup CLI
+- [claudettemobile.com](https://claudettemobile.com) — Website and documentation
 
 ## Contributing
 
