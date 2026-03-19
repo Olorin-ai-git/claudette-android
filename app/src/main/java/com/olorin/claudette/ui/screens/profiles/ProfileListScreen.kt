@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -79,6 +80,7 @@ fun ProfileListScreen(
     onAddProfile: () -> Unit,
     onEditProfile: (String) -> Unit,
     onConnect: (profileId: String, path: String) -> Unit,
+    onOpenSettings: () -> Unit = {},
     viewModel: ProfileListViewModel = hiltViewModel()
 ) {
     val profiles by viewModel.profiles.collectAsState()
@@ -117,6 +119,15 @@ fun ProfileListScreen(
                             text = "Claudette",
                             fontFamily = FontFamily.Monospace,
                             color = ClaudettePrimary
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = ClaudetteOutline
                         )
                     }
                 },

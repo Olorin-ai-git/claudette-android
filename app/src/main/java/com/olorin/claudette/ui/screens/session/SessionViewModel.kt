@@ -84,6 +84,26 @@ class SessionViewModel @Inject constructor(
     val authInterceptor = AuthUrlInterceptor(appContext)
     val permissionService = PermissionNotificationService(appContext)
 
+    // Speech recognition
+    private val speechService = com.olorin.claudette.services.impl.SpeechRecognitionService(
+        context = appContext,
+        onTranscriptFinalized = { transcript ->
+            val controller = getActiveTerminalController() ?: return@SpeechRecognitionService
+            val textBytes = transcript.toByteArray(Charsets.UTF_8)
+            controller.sendInput(textBytes)
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(100)
+                controller.sendInput(byteArrayOf(0x0D)) // Enter key
+            }
+        }
+    )
+    val isListening: StateFlow<Boolean> = speechService.isListening
+    val currentTranscript: StateFlow<String> = speechService.currentTranscript
+
+    fun toggleSpeechRecognition() {
+        speechService.toggleListening()
+    }
+
     // Connection managers and terminal controllers per tab
     private val connectionManagers = mutableMapOf<String, SshConnectionManager>()
     private val terminalControllers = mutableMapOf<String, TerminalController>()

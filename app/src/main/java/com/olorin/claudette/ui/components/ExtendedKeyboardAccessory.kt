@@ -21,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,6 +38,8 @@ fun ExtendedKeyboardAccessory(
     onDismissKeyboard: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -55,7 +59,10 @@ fun ExtendedKeyboardAccessory(
                 Box(
                     modifier = Modifier
                         .background(buttonColor, RoundedCornerShape(6.dp))
-                        .clickable { onButtonClick(button) }
+                        .clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onButtonClick(button)
+                        }
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -71,7 +78,10 @@ fun ExtendedKeyboardAccessory(
         }
 
         IconButton(
-            onClick = onDismissKeyboard,
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onDismissKeyboard()
+            },
             modifier = Modifier.size(36.dp)
         ) {
             Icon(

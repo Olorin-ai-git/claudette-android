@@ -9,6 +9,7 @@ import androidx.navigation.navArgument
 import com.olorin.claudette.ui.screens.profiles.ProfileEditorScreen
 import com.olorin.claudette.ui.screens.profiles.ProfileListScreen
 import com.olorin.claudette.ui.screens.session.SessionScreen
+import com.olorin.claudette.ui.screens.settings.AppSettingsScreen
 import com.olorin.claudette.ui.screens.splash.SplashScreen
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -19,6 +20,7 @@ object NavRoutes {
     const val PROFILE_EDITOR = "profile_editor/{profileId}"
     const val PROFILE_EDITOR_NEW = "profile_editor/new"
     const val SESSION = "session/{profileId}/{encodedPath}"
+    const val APP_SETTINGS = "app_settings"
 
     fun profileEditor(profileId: String) = "profile_editor/$profileId"
     fun session(profileId: String, projectPath: String): String {
@@ -52,7 +54,16 @@ fun ClaudetteNavHost() {
                 },
                 onConnect = { profileId, path ->
                     navController.navigate(NavRoutes.session(profileId, path))
+                },
+                onOpenSettings = {
+                    navController.navigate(NavRoutes.APP_SETTINGS)
                 }
+            )
+        }
+
+        composable(NavRoutes.APP_SETTINGS) {
+            AppSettingsScreen(
+                onBack = { navController.popBackStack() }
             )
         }
 
