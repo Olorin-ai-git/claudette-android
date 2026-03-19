@@ -23,17 +23,14 @@ class TerminalController(
 
     private var collectJob: Job? = null
 
-    // Output line buffer for block detection
-    private val outputLines = mutableListOf<String>()
-    private val maxLines = 5000
-    private var currentLine = StringBuilder()
+    private val lineBuffer = LineBuffer()
 
     fun start() {
         if (collectJob != null) return
 
         collectJob = scope.launch {
             connectionManager.outputFlow.collect { bytes ->
-                appendForBlockDetection(bytes)
+                lineBuffer.append(bytes)
                 _renderTrigger.emit(bytes)
             }
         }
@@ -58,28 +55,10 @@ class TerminalController(
         connectionManager.resizeTerminal(cols, rows)
     }
 
-    fun getOutputLines(): List<String> = synchronized(outputLines) {
-        outputLines.toList()
-    }
+    fun getOutputLines(): List<String> = lineBuffer.getLines()
 
     fun getTerminalContent(): String {
         return connectionManager.getTerminalContent()
     }
 
-    private fun appendForBlockDetection(bytes: ByteArray) {
-        val text = String(bytes, Charsets.UTF_8)
-        synchronized(outputLines) {
-            for (char in text) {
-                if (char == '\n') {
-                    outputLines.add(currentLine.toString())
-                    currentLine.clear()
-                    if (outputLines.size > maxLines) {
-                        outputLines.removeAt(0)
-                    }
-                } else {
-                    currentLine.append(char)
-                }
-            }
-        }
-    }
 }

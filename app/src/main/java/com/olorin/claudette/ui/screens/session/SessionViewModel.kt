@@ -89,8 +89,7 @@ class SessionViewModel @Inject constructor(
         context = appContext,
         onTranscriptFinalized = { transcript ->
             val controller = getActiveTerminalController() ?: return@SpeechRecognitionService
-            val textBytes = transcript.toByteArray(Charsets.UTF_8)
-            controller.sendInput(textBytes)
+            controller.sendInput(transcript)
             viewModelScope.launch {
                 kotlinx.coroutines.delay(100)
                 controller.sendInput(byteArrayOf(0x0D)) // Enter key
@@ -282,7 +281,8 @@ class SessionViewModel @Inject constructor(
         val manager = SshConnectionManager(
             config = config,
             keychainService = keychainService,
-            tmuxService = tmuxService
+            tmuxService = tmuxService,
+            serverKeyVerifier = hostKeyValidator
         )
 
         // Wire output interceptor
@@ -343,6 +343,7 @@ class SessionViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        speechService.stopListening()
         disconnect()
     }
 }

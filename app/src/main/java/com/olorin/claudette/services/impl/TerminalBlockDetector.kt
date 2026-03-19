@@ -1,12 +1,11 @@
 package com.olorin.claudette.services.impl
 
 import com.olorin.claudette.models.TerminalBlock
+import com.olorin.claudette.terminal.AnsiUtils
 
 object TerminalBlockDetector {
 
     private val promptSuffixes = listOf("$ ", "% ", "# ", "> ")
-
-    private val ansiPattern = Regex("\u001B\\[[0-9;]*[a-zA-Z]")
 
     fun isPromptLine(line: String): Boolean {
         val stripped = stripANSI(line).trim()
@@ -47,7 +46,5 @@ object TerminalBlockDetector {
         )
     }
 
-    fun stripANSI(text: String): String {
-        return ansiPattern.replace(text, "")
-    }
+    fun stripANSI(text: String): String = AnsiUtils.stripANSI(text)
 }

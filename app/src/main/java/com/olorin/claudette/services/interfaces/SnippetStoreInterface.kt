@@ -3,6 +3,6 @@ package com.olorin.claudette.services.interfaces
 import com.olorin.claudette.models.PromptSnippet
 
 interface SnippetStoreInterface {
-    fun loadSnippets(): List<PromptSnippet>
-    fun saveSnippets(snippets: List<PromptSnippet>)
+    suspend fun loadSnippets(): List<PromptSnippet>
+    suspend fun saveSnippets(snippets: List<PromptSnippet>)
 }
