@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.util.Patterns
+import com.olorin.claudette.terminal.AnsiUtils
 import timber.log.Timber
 
 class AuthUrlInterceptor(
@@ -69,10 +70,6 @@ class AuthUrlInterceptor(
     }
 
     companion object {
-        private val ansiPattern = Regex("\u001B\\[[0-9;]*[a-zA-Z]")
-
-        fun stripANSI(text: String): String {
-            return ansiPattern.replace(text, "")
-        }
+        fun stripANSI(text: String): String = AnsiUtils.stripANSI(text)
     }
 }

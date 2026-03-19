@@ -11,11 +11,7 @@ import org.apache.sshd.client.SshClient
 import org.apache.sshd.client.session.ClientSession
 import org.apache.sshd.sftp.client.SftpClient
 import org.apache.sshd.sftp.client.SftpClientFactory
-import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import timber.log.Timber
-import java.security.KeyFactory
-import java.security.KeyPair
-import java.security.spec.PKCS8EncodedKeySpec
 import java.util.concurrent.TimeUnit
 
 class RemoteFileBrowserService : RemoteFileBrowserServiceInterface {
@@ -169,26 +165,6 @@ class RemoteFileBrowserService : RemoteFileBrowserServiceInterface {
         return sftpClient ?: error("Not connected to remote server")
     }
 
-    private fun buildEd25519KeyPair(rawPrivateKey: ByteArray): KeyPair {
-        val privateKeyParams = Ed25519PrivateKeyParameters(rawPrivateKey, 0)
-        val publicKeyParams = privateKeyParams.generatePublicKey()
-
-        val pkcs8Prefix = byteArrayOf(
-            0x30, 0x2E, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
-            0x03, 0x2B, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20
-        )
-        val pkcs8Bytes = pkcs8Prefix + rawPrivateKey
-
-        val keyFactory = KeyFactory.getInstance("Ed25519")
-        val privateKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(pkcs8Bytes))
-
-        val x509Prefix = byteArrayOf(
-            0x30, 0x2A, 0x30, 0x05, 0x06, 0x03, 0x2B, 0x65,
-            0x70, 0x03, 0x21, 0x00
-        )
-        val x509Bytes = x509Prefix + publicKeyParams.encoded
-        val publicKey = keyFactory.generatePublic(java.security.spec.X509EncodedKeySpec(x509Bytes))
-
-        return KeyPair(publicKey, privateKey)
-    }
+    private fun buildEd25519KeyPair(rawPrivateKey: ByteArray) =
+        Ed25519KeyPairBuilder.build(rawPrivateKey)
 }

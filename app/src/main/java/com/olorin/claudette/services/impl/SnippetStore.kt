@@ -3,6 +3,10 @@ package com.olorin.claudette.services.impl
 import android.content.Context
 import com.olorin.claudette.models.PromptSnippet
 import com.olorin.claudette.services.interfaces.SnippetStoreInterface
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import timber.log.Timber
@@ -14,7 +18,7 @@ class SnippetStore(
 ) : SnippetStoreInterface {
 
     private val file: File
-    private val lock = Any()
+    private val mutex = Mutex()
     private val json = Json { prettyPrint = true; encodeDefaults = true }
 
     init {
@@ -23,26 +27,30 @@ class SnippetStore(
         file = File(appDir, storageFileName)
     }
 
-    override fun loadSnippets(): List<PromptSnippet> = synchronized(lock) {
-        val snippets = loadDefaultSnippets().toMutableList()
+    override suspend fun loadSnippets(): List<PromptSnippet> = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            val snippets = loadDefaultSnippets().toMutableList()
 
-        if (file.exists()) {
-            try {
-                val userSnippets = json.decodeFromString<List<PromptSnippet>>(file.readText())
-                val userCustom = userSnippets.filter { !it.isBuiltIn }
-                snippets.addAll(userCustom)
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to load user snippets")
+            if (file.exists()) {
+                try {
+                    val userSnippets = json.decodeFromString<List<PromptSnippet>>(file.readText())
+                    val userCustom = userSnippets.filter { !it.isBuiltIn }
+                    snippets.addAll(userCustom)
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to load user snippets")
+                }
             }
-        }
 
-        return snippets
+            snippets
+        }
     }
 
-    override fun saveSnippets(snippets: List<PromptSnippet>) = synchronized(lock) {
-        val data = json.encodeToString(snippets)
-        file.writeText(data)
-        Timber.i("Saved %d snippets", snippets.size)
+    override suspend fun saveSnippets(snippets: List<PromptSnippet>) = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            val data = json.encodeToString(snippets)
+            file.writeText(data)
+            Timber.i("Saved %d snippets", snippets.size)
+        }
     }
 
     private fun loadDefaultSnippets(): List<PromptSnippet> {

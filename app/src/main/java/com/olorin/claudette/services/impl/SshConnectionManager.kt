@@ -7,6 +7,7 @@ import com.olorin.claudette.models.ConnectionState
 import com.olorin.claudette.services.interfaces.KeychainServiceInterface
 import com.olorin.claudette.services.interfaces.OutputInterceptor
 import com.olorin.claudette.services.interfaces.TmuxSessionServiceInterface
+import com.olorin.claudette.terminal.LineBuffer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,18 +24,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.apache.sshd.client.SshClient
 import org.apache.sshd.client.channel.ChannelShell
+import org.apache.sshd.client.keyverifier.ServerKeyVerifier
 import org.apache.sshd.client.session.ClientSession
 import org.apache.sshd.common.channel.PtyChannelConfiguration
 import org.apache.sshd.sftp.client.SftpClientFactory
-import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import timber.log.Timber
-import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
-import java.security.KeyFactory
-import java.security.KeyPair
-import java.security.spec.PKCS8EncodedKeySpec
 import java.util.EnumSet
 import java.util.concurrent.TimeUnit
 
@@ -42,7 +39,8 @@ class SshConnectionManager(
     private val config: AppConfiguration,
     private val keychainService: KeychainServiceInterface,
     private val tmuxService: TmuxSessionServiceInterface,
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO)
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
+    var serverKeyVerifier: ServerKeyVerifier? = null
 ) {
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
@@ -62,14 +60,9 @@ class SshConnectionManager(
     private var lastCredential: String? = null
     private var lastProfileId: String? = null
 
-    // Output line buffer for block detection
-    private val outputLineBuffer = mutableListOf<String>()
-    private val maxOutputLines = 5000
-    private var currentLine = StringBuilder()
+    private val lineBuffer = LineBuffer()
 
-    fun getTerminalContent(): String = synchronized(outputLineBuffer) {
-        outputLineBuffer.joinToString("\n")
-    }
+    fun getTerminalContent(): String = lineBuffer.getContent()
 
     fun connect(
         settings: ConnectionSettings,
@@ -104,6 +97,7 @@ class SshConnectionManager(
         connectionJob = scope.launch {
             try {
                 val client = SshClient.setUpDefaultClient()
+                serverKeyVerifier?.let { client.serverKeyVerifier = it }
                 client.start()
                 sshClient = client
 
@@ -124,7 +118,7 @@ class SshConnectionManager(
                         val keyData = keychainService.retrievePrivateKeyData(keyTag)
                             ?: error("SSH key not found in keychain — try regenerating")
 
-                        val keyPair = buildEd25519KeyPair(keyData)
+                        val keyPair = Ed25519KeyPairBuilder.build(keyData)
                         sess.addPublicKeyIdentity(keyPair)
                     }
                 }
@@ -161,7 +155,7 @@ class SshConnectionManager(
                         initialCommand = config.sshCommand
                     ) + "\n"
                 } else {
-                    "cd ${settings.projectPath} && ${config.sshCommand}\n"
+                    "cd ${shellEscape(settings.projectPath)} && ${config.sshCommand}\n"
                 }
 
                 Timber.i("Sending command: %s", command.take(120))
@@ -181,7 +175,7 @@ class SshConnectionManager(
                             if (n == -1) break
                             val chunk = errBuf.copyOf(n)
                             outputInterceptor?.onOutput(chunk)
-                            appendToLineBuffer(chunk)
+                            lineBuffer.append(chunk)
                             _outputFlow.emit(chunk)
                         }
                     } catch (_: Exception) {
@@ -197,7 +191,7 @@ class SshConnectionManager(
 
                     val chunk = buffer.copyOf(bytesRead)
                     outputInterceptor?.onOutput(chunk)
-                    appendToLineBuffer(chunk)
+                    lineBuffer.append(chunk)
                     _outputFlow.emit(chunk)
                 }
 
@@ -325,48 +319,8 @@ class SshConnectionManager(
         sshClient = null
     }
 
-    private fun appendToLineBuffer(chunk: ByteArray) {
-        val text = String(chunk, Charsets.UTF_8)
-        synchronized(outputLineBuffer) {
-            for (char in text) {
-                if (char == '\n') {
-                    outputLineBuffer.add(currentLine.toString())
-                    currentLine.clear()
-                    if (outputLineBuffer.size > maxOutputLines) {
-                        outputLineBuffer.removeAt(0)
-                    }
-                } else {
-                    currentLine.append(char)
-                }
-            }
-        }
-    }
-
-    private fun buildEd25519KeyPair(rawPrivateKey: ByteArray): KeyPair {
-        val privateKeyParams = Ed25519PrivateKeyParameters(rawPrivateKey, 0)
-        val publicKeyParams = privateKeyParams.generatePublicKey()
-
-        // Build PKCS#8 encoded private key for Java KeyPair
-        val pkcs8Prefix = byteArrayOf(
-            0x30, 0x2E, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
-            0x03, 0x2B, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20
-        )
-        val pkcs8Bytes = pkcs8Prefix + rawPrivateKey
-
-        val keyFactory = KeyFactory.getInstance("Ed25519")
-        val privateKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(pkcs8Bytes))
-
-        // Build X.509 encoded public key
-        val x509Prefix = byteArrayOf(
-            0x30, 0x2A, 0x30, 0x05, 0x06, 0x03, 0x2B, 0x65,
-            0x70, 0x03, 0x21, 0x00
-        )
-        val x509Bytes = x509Prefix + publicKeyParams.encoded
-
-        val publicKey = keyFactory.generatePublic(java.security.spec.X509EncodedKeySpec(x509Bytes))
-
-        return KeyPair(publicKey, privateKey)
-    }
+    private fun shellEscape(value: String): String =
+        "'" + value.replace("'", "'\\''") + "'"
 
     private fun humanReadableError(error: Throwable): String {
         val message = error.message ?: error.toString()

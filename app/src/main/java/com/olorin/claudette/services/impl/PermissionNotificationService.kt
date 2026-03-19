@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import com.olorin.claudette.terminal.AnsiUtils
 import timber.log.Timber
 import java.util.UUID
 
@@ -103,10 +104,6 @@ class PermissionNotificationService(
             "(y)es/(n)o"
         )
 
-        private val ansiPattern = Regex("\u001B\\[[0-9;]*[a-zA-Z]")
-
-        fun stripANSI(text: String): String {
-            return ansiPattern.replace(text, "")
-        }
+        fun stripANSI(text: String): String = AnsiUtils.stripANSI(text)
     }
 }

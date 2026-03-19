@@ -1,6 +1,7 @@
 package com.olorin.claudette.services.impl
 
 import com.olorin.claudette.models.AgentTreeNode
+import com.olorin.claudette.terminal.AnsiUtils
 import timber.log.Timber
 import java.util.UUID
 
@@ -108,10 +109,6 @@ class AgentActivityParser {
     }
 
     companion object {
-        private val ansiPattern = Regex("\u001B\\[[0-9;]*[a-zA-Z]")
-
-        fun stripANSI(text: String): String {
-            return ansiPattern.replace(text, "")
-        }
+        fun stripANSI(text: String): String = AnsiUtils.stripANSI(text)
     }
 }
