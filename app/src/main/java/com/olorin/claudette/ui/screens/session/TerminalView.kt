@@ -5,6 +5,10 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ViewTreeObserver
@@ -80,6 +84,8 @@ fun TerminalView(
                     if (block != null) {
                         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         cm.setPrimaryClip(ClipData.newPlainText("Terminal Block", block.content))
+                        // Haptic feedback on successful copy
+                        performCopyHaptic(context)
                         Toast.makeText(context, "Block copied", Toast.LENGTH_SHORT).show()
                     }
                     return true
@@ -146,4 +152,20 @@ private val ANSI_REGEX = Regex("\u001B\\[[0-9;]*[a-zA-Z]")
 
 private fun stripAnsi(text: String): String {
     return ANSI_REGEX.replace(text, "")
+}
+
+@Suppress("DEPRECATION")
+private fun performCopyHaptic(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+        vibratorManager.defaultVibrator.vibrate(
+            VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE)
+        )
+    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        vibrator.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE))
+    } else {
+        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        vibrator.vibrate(30)
+    }
 }

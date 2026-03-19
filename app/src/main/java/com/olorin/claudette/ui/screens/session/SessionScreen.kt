@@ -3,20 +3,33 @@ package com.olorin.claudette.ui.screens.session
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -26,9 +39,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -78,9 +93,12 @@ import com.olorin.claudette.ui.screens.filebrowser.RemoteFileBrowserScreen
 import com.olorin.claudette.ui.screens.snippets.SnippetDrawerScreen
 import com.olorin.claudette.ui.theme.ClaudetteBackground
 import com.olorin.claudette.ui.theme.ClaudetteError
+import com.olorin.claudette.ui.theme.ClaudetteOnSurface
 import com.olorin.claudette.ui.theme.ClaudettePrimary
 import com.olorin.claudette.ui.theme.ClaudetteSurface
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,6 +124,12 @@ fun SessionScreen(
     var showFileBrowserSheet by remember { mutableStateOf(false) }
     var showAgentSheet by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var showCopyToast by remember { mutableStateOf(false) }
+    var copyToastMessage by remember { mutableStateOf("") }
+
+    // Speech recognition state
+    val isListening by viewModel.isListening.collectAsState()
+    val currentTranscript by viewModel.currentTranscript.collectAsState()
 
     // Image picker for Paste Img
     val imagePicker = rememberLauncherForActivityResult(
@@ -126,6 +150,14 @@ fun SessionScreen(
                     Toast.makeText(context, "Upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+
+    // Auto-dismiss copy toast
+    LaunchedEffect(showCopyToast) {
+        if (showCopyToast) {
+            delay(2000)
+            showCopyToast = false
         }
     }
 
@@ -226,69 +258,91 @@ fun SessionScreen(
         },
         containerColor = ClaudetteBackground
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Auth URL banner
-            detectedAuthUrl?.let { url ->
-                AuthUrlBanner(
-                    url = url,
-                    onDismiss = { viewModel.clearDetectedAuthUrl() },
-                    context = context
-                )
-            }
-
-            // Tab bar (only show if >1 tab)
-            if (tabs.size > 1) {
-                TabBar(
-                    tabs = tabs,
-                    activeTabId = activeTabId,
-                    onSelectTab = { viewModel.selectTab(it) },
-                    onCloseTab = { viewModel.closeTab(it) },
-                    onAddTab = { viewModel.addTab() }
-                )
-            }
-
-            // Terminal content area
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .background(Color(android.graphics.Color.parseColor(config.terminalBackgroundColor)))
-            ) {
-                val activeController = viewModel.getActiveTerminalController()
-                if (activeController != null) {
-                    TerminalView(
-                        controller = activeController,
-                        config = config,
-                        modifier = Modifier.fillMaxSize()
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Auth URL banner
+                detectedAuthUrl?.let { url ->
+                    AuthUrlBanner(
+                        url = url,
+                        onDismiss = { viewModel.clearDetectedAuthUrl() },
+                        context = context
                     )
-                } else {
-                    // Show connection state
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        when (connectionState) {
-                            is ConnectionState.Connecting -> Text("Connecting...", color = Color.White)
-                            is ConnectionState.Reconnecting -> {
-                                val r = connectionState as ConnectionState.Reconnecting
-                                Text("Reconnecting ${r.attempt}/${r.maxAttempts}...", color = Color.White)
+                }
+
+                // Tab bar (only show if >1 tab)
+                if (tabs.size > 1) {
+                    TabBar(
+                        tabs = tabs,
+                        activeTabId = activeTabId,
+                        onSelectTab = { viewModel.selectTab(it) },
+                        onCloseTab = { viewModel.closeTab(it) },
+                        onAddTab = { viewModel.addTab() }
+                    )
+                }
+
+                // Terminal content area
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .background(Color(android.graphics.Color.parseColor(config.terminalBackgroundColor)))
+                ) {
+                    val activeController = viewModel.getActiveTerminalController()
+                    if (activeController != null) {
+                        TerminalView(
+                            controller = activeController,
+                            config = config,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        // Show connection state
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            when (connectionState) {
+                                is ConnectionState.Connecting -> Text("Connecting...", color = Color.White)
+                                is ConnectionState.Reconnecting -> {
+                                    val r = connectionState as ConnectionState.Reconnecting
+                                    Text("Reconnecting ${r.attempt}/${r.maxAttempts}...", color = Color.White)
+                                }
+                                is ConnectionState.Failed -> {
+                                    val f = connectionState as ConnectionState.Failed
+                                    Text("Failed: ${f.errorDescription}", color = ClaudetteError)
+                                }
+                                else -> Text("Disconnected", color = Color.Gray)
                             }
-                            is ConnectionState.Failed -> {
-                                val f = connectionState as ConnectionState.Failed
-                                Text("Failed: ${f.errorDescription}", color = ClaudetteError)
-                            }
-                            else -> Text("Disconnected", color = Color.Gray)
                         }
                     }
                 }
-            }
 
-            // Extended keyboard accessory
-            ExtendedKeyboardAccessory(
+                // Status bar (like iOS) — shown when keyboard is not up
+                StatusBar(
+                    connectionState = connectionState,
+                    onCopySession = {
+                        val content = viewModel.copySessionToClipboard()
+                        if (content != null) {
+                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            cm.setPrimaryClip(ClipData.newPlainText("Session", content))
+                            copyToastMessage = "Session copied"
+                        } else {
+                            copyToastMessage = "No content to copy"
+                        }
+                        showCopyToast = true
+                    },
+                    onDisconnect = {
+                        viewModel.disconnect()
+                        onDisconnect()
+                    },
+                    onRetry = { viewModel.reconnect() }
+                )
+
+                // Extended keyboard accessory
+                ExtendedKeyboardAccessory(
                 buttons = config.keyboardAccessoryButtons,
                 backgroundColor = Color(android.graphics.Color.parseColor(config.keyboardAccessoryBackgroundColor)),
                 buttonColor = Color(android.graphics.Color.parseColor(config.keyboardAccessoryButtonColor)),
@@ -296,6 +350,11 @@ fun SessionScreen(
                 onButtonClick = { button ->
                     if (button.action == "paste_image") {
                         imagePicker.launch("image/*")
+                    } else if (button.action == "Paste" || button.action == "paste") {
+                        // Clipboard paste — prefer image, fall back to text (matches iOS behavior)
+                        scope.launch {
+                            handleClipboardPaste(context, viewModel)
+                        }
                     } else if (button.byteSequence.isNotEmpty()) {
                         val bytes = button.byteSequence.map { it.toByte() }.toByteArray()
                         viewModel.getActiveTerminalController()?.sendInput(bytes)
@@ -304,6 +363,41 @@ fun SessionScreen(
                 onDismissKeyboard = { focusManager.clearFocus() },
                 modifier = Modifier.imePadding()
             )
+            }
+
+            // Floating microphone overlay (like iOS)
+            val isConnected = connectionState is ConnectionState.Connected
+            if (isConnected) {
+                MicrophoneOverlay(
+                    isListening = isListening,
+                    currentTranscript = currentTranscript,
+                    onToggleListening = { viewModel.toggleSpeechRecognition() },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 80.dp)
+                )
+            }
+
+            // Copy toast overlay
+            AnimatedVisibility(
+                visible = showCopyToast,
+                enter = slideInVertically { -it } + fadeIn(),
+                exit = slideOutVertically { -it } + fadeOut(),
+                modifier = Modifier.align(Alignment.TopCenter)
+            ) {
+                Text(
+                    text = copyToastMessage,
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .background(
+                            Color(0xFF22C55E).copy(alpha = 0.9f),
+                            RoundedCornerShape(16.dp)
+                        )
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
         }
     }
 
@@ -463,6 +557,168 @@ private fun ConnectionStateIcon(state: ConnectionState) {
             .size(8.dp)
             .background(color, CircleShape)
     )
+}
+
+@Composable
+private fun StatusBar(
+    connectionState: ConnectionState,
+    onCopySession: () -> Unit,
+    onDisconnect: () -> Unit,
+    onRetry: () -> Unit
+) {
+    val (statusColor, statusText) = when (connectionState) {
+        is ConnectionState.Connected -> Color(0xFF22C55E) to "Connected"
+        is ConnectionState.Connecting -> Color(0xFFF59E0B) to "Connecting..."
+        is ConnectionState.Reconnecting -> {
+            val r = connectionState
+            Color(0xFFF59E0B) to "Reconnecting (${r.attempt}/${r.maxAttempts})..."
+        }
+        is ConnectionState.Failed -> ClaudetteError to "Failed: ${connectionState.errorDescription}"
+        is ConnectionState.Disconnected -> Color.Gray to "Disconnected"
+    }
+    val isConnected = connectionState is ConnectionState.Connected
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(24.dp)
+            .background(ClaudetteSurface.copy(alpha = 0.9f))
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .background(statusColor, CircleShape)
+        )
+        Text(
+            text = statusText,
+            color = ClaudetteOnSurface,
+            fontSize = 10.sp,
+            fontFamily = FontFamily.Monospace,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        if (isConnected) {
+            Icon(
+                imageVector = Icons.Default.ContentPaste,
+                contentDescription = "Copy session",
+                tint = ClaudetteOnSurface,
+                modifier = Modifier
+                    .size(14.dp)
+                    .clickable { onCopySession() }
+            )
+            Text(
+                text = "Disconnect",
+                color = ClaudetteError,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.clickable { onDisconnect() }
+            )
+        }
+        if (connectionState is ConnectionState.Failed) {
+            Text(
+                text = "Retry",
+                color = ClaudettePrimary,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.clickable { onRetry() }
+            )
+        }
+    }
+}
+
+@Composable
+private fun MicrophoneOverlay(
+    isListening: Boolean,
+    currentTranscript: String,
+    onToggleListening: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Live transcript bubble
+        if (isListening && currentTranscript.isNotEmpty()) {
+            Text(
+                text = currentTranscript,
+                color = Color.White,
+                fontSize = 12.sp,
+                maxLines = 4,
+                modifier = Modifier
+                    .width(240.dp)
+                    .background(
+                        Color.Black.copy(alpha = 0.75f),
+                        RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            )
+        }
+
+        // Mic FAB
+        FloatingActionButton(
+            onClick = onToggleListening,
+            containerColor = if (isListening) Color.Red else ClaudettePrimary,
+            contentColor = Color.White,
+            shape = CircleShape,
+            modifier = Modifier.size(56.dp)
+        ) {
+            Icon(
+                imageVector = if (isListening) Icons.Default.Mic else Icons.Default.MicOff,
+                contentDescription = if (isListening) "Stop listening" else "Start listening",
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Handles clipboard paste — prefers image (uploads via SFTP), falls back to text.
+ * Matches iOS TerminalContainerView.handlePaste behavior.
+ */
+@Suppress("DEPRECATION")
+private suspend fun handleClipboardPaste(context: Context, viewModel: SessionViewModel) {
+    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val clip = cm.primaryClip ?: return
+
+    // Check for image in clipboard
+    for (i in 0 until clip.itemCount) {
+        val item = clip.getItemAt(i)
+        val uri = item.uri
+        if (uri != null && isImageUri(context, uri)) {
+            try {
+                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri))
+                } else {
+                    MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                }
+                val baos = ByteArrayOutputStream()
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, baos)
+                val jpegBytes = baos.toByteArray()
+                val remotePath = "/tmp/claudette_paste_${System.currentTimeMillis()}.jpg"
+                viewModel.getActiveConnectionManager()?.uploadData(jpegBytes, remotePath)
+                viewModel.getActiveTerminalController()?.sendInput(remotePath)
+                return
+            } catch (e: Exception) {
+                // Fall through to text paste
+            }
+        }
+    }
+
+    // Fall back to text paste
+    val text = clip.getItemAt(0)?.coerceToText(context)?.toString()
+    if (!text.isNullOrEmpty()) {
+        viewModel.getActiveTerminalController()?.sendInput(text)
+    }
+}
+
+private fun isImageUri(context: Context, uri: Uri): Boolean {
+    val mimeType = context.contentResolver.getType(uri) ?: return false
+    return mimeType.startsWith("image/")
 }
 
 @Composable
